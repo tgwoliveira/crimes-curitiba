@@ -2,7 +2,6 @@ import pandas as pd
 import os
 import requests
 from bs4 import BeautifulSoup
-from dateutil.relativedelta import relativedelta # Mantido para garantir compatibilidade futura, embora não seja o foco
 
 # --- Configurações da Base de Dados ---
 BASE_URL = "http://dadosabertos.c3sl.ufpr.br/curitiba/Sigesguarda/"
@@ -19,7 +18,6 @@ all_data = []
 # =========================================================
 # ETAPA 1: RASPAR TODOS OS LINKS .CSV DO DIRETÓRIO
 # =========================================================
-print("🌐 Raspando links de arquivos CSV no diretório...")
 
 try:
     response = requests.get(BASE_URL)
