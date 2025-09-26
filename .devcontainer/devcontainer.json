@@ -1,0 +1,26 @@
+{
+  "name": "Análise de Crimes em Curitiba (Python/Jupyter)",
+  // Usa a imagem base da Microsoft para Python, que já inclui Jupyter e várias libs de data science
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bookworm",
+  
+  // Instala as dependências do requirements.txt após o container estar pronto
+  "postCreateCommand": [
+    "pip install --upgrade pip",
+    "pip install -r requirements.txt",
+    // Executa o script de coleta para ter dados prontos
+    "python coleta.py"
+  ],
+
+  "customizations": {
+    "vscode": {
+      // Extensões recomendadas para este projeto
+      "extensions": [
+        "ms-python.python",       // Suporte principal ao Python
+        "ms-toolsai.jupyter"      // Suporte para Jupyter Notebooks
+      ]
+    }
+  },
+
+  // Encaminha a porta 8888, comum para acesso ao servidor Jupyter ou aplicações web
+  "forwardPorts": [8888]
+}
