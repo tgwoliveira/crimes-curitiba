@@ -1,0 +1,6 @@
+requests
+pandas
+matplotlib
+jupyter
+python-dateutil
+beautifulsoup4

@@ -6,7 +6,9 @@ Este projeto tem como objetivo principal coletar, processar e analisar dados pú
 
 O ambiente de desenvolvimento é totalmente reproduzível via GitHub Codespaces.
 
-Fonte: [text](https://dadosabertos.curitiba.pr.gov.br/conjuntodado/detalhe?chave=b16ead9d-835e-41e8-a4d7-dcc4f2b4b627)
+Fonte: 
+1. [Dados Abertos Curitiba 2016-2024](https://dadosabertos.curitiba.pr.gov.br/conjuntodado/detalhe?chave=b16ead9d-835e-41e8-a4d7-dcc4f2b4b627)
+2. [Dados Abertos Curitiba 2025](https://dadosabertos.curitiba.pr.gov.br/conjuntodado/detalhe?chave=b16ead9d-835e-41e8-a4d7-dcc4f2b4b627)
 
 ## 🛠️ Tecnologias e Ambiente
 
