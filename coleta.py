@@ -130,8 +130,7 @@ for download_url in csv_links:
             df["mes"] = df["data"].dt.month
 
         # 3. Escrita Incremental no Arquivo Final (Otimização de Memória)
-        global primeiro_arquivo # Usa a flag global
-        header_flag = primeiro_arquivo
+        header_flag = primeiro_arquivo # Não precisa de 'global' aqui
         mode_flag = 'w' if primeiro_arquivo else 'a'
         
         df.to_csv(
