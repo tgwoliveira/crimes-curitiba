@@ -23,8 +23,8 @@ Todo o ambiente de trabalho está configurado no Codespaces para garantir a repr
 ### ⚙️ Como Rodar (Codespaces)
 
 Basta clicar no botão **"Code"** no GitHub e selecionar **"Create codespace on main"**. O ambiente fará automaticamente:
-1.  Instalação das dependências (`pip install -r requirements.txt`).
-2.  Execução da coleta de dados (`python coleta.py`) para baixar e unificar a base de dados histórica.
+1.  Instalação das dependências (`pip install -r requirements.txt`).
+2.  Execução da coleta de dados (`python coleta.py`) para baixar **todos** os arquivos brutos **individualmente** para a pasta `data/raw/`.
 
 ---
 
@@ -60,8 +60,8 @@ Após a análise dos dados de [ANO INICIAL] a [ANO FINAL], identificamos:
 
 ## 📁 Estrutura do Repositório
 
-* `coleta.py` → Script para raspar e unificar os dados brutos da UFPR.
-* `data/raw/` → Dados brutos coletados (ignorados pelo Git, mas gerados pelo script).
-* `data/processed/` → Contém o arquivo `ocorrencias_tratadas.csv` unificado.
+* `coleta.py` → Script para raspar e baixar **apenas** os arquivos brutos individuais (abaixo de 100MB) para a pasta `data/raw/`.
+* `data/raw/` → Contém os **arquivos CSV brutos individuais**. Estes arquivos são lidos e unificados em tempo de execução pelo Notebook, evitando o limite de 100MB do GitHub.
+* `data/processed/` → **Não utilizado para armazenamento de grandes arquivos.** (Pode ser usado para saídas futuras de modelos ou agregação, mas não do CSV unificado).
 * `notebooks/` → Contém o `analise.ipynb` com a EDA e visualizações.
 * `.devcontainer/` → Arquivo de configuração para o Codespaces.

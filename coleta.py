@@ -3,21 +3,16 @@ import os
 import requests
 from bs4 import BeautifulSoup
 
-# --- Configurações da Base de Dados ---
+# --- Configurações de URL ---
 # Fonte 1: Histórico (índice de arquivos)
 BASE_URL_HISTORICO = "http://dadosabertos.c3sl.ufpr.br/curitiba/Sigesguarda/"
-# Fonte 2: Mais Recente (página com link de download)
+# Fonte 2: Mais Recente (página com links em tabela)
 URL_DADOS_MAIS_RECENTES = "https://dadosabertos.curitiba.pr.gov.br/conjuntodado/detalhe?chave=b16ead9d-835e-41e8-a4d7-dcc4f2b4b627"
-# -------------------------------------
+# ----------------------------
 
-# Pastas de saída
+# Pasta de saída (apenas a pasta RAW é necessária)
 RAW_DIR = "data/raw"
-PROCESSED_DIR = "data/processed"
 os.makedirs(RAW_DIR, exist_ok=True)
-os.makedirs(PROCESSED_DIR, exist_ok=True)
-
-FINAL_CSV_PATH = os.path.join(PROCESSED_DIR, "ocorrencias_tratadas.csv")
-primeiro_arquivo = True 
 
 
 def get_historic_links():
@@ -37,35 +32,26 @@ def get_historic_links():
     return csv_links
 
 
-def get_latest_link():
-    """Busca o link de download direto na página mais recente."""
-    print("🌐 Buscando link no portal de dados mais recentes...")
+def get_latest_links_from_table():
+    """Busca links de arquivos CSV na tabela do portal mais recente (2024/2025)."""
+    print("🌐 Buscando links na tabela do portal de dados mais recentes...")
+    recent_links = []
     try:
         response = requests.get(URL_DADOS_MAIS_RECENTES)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # O link de download geralmente tem a classe 'btn btn-primary' ou um atributo específico.
-        # Procuramos por um link que termine em .csv dentro da página.
-        # Ajuste esta lógica se não funcionar, mas esta é a tentativa mais robusta:
-        for link in soup.find_all('a'):
+        # Procuramos por links que contenham o padrão de nome de arquivo CSV
+        for link in soup.find_all('a', href=True):
             href = link.get('href')
-            if href and 'ocorrencias-criminais.csv' in href and 'download' in href:
-                # O link direto é o valor do href
-                return href
+            if href and 'Base_de_Dados.csv' in href and 'mid-dadosabertos' in href:
+                recent_links.append(href)
         
-        # Se não encontrar o link direto, tenta outra heurística comum de portais de dados abertos
-        for link in soup.find_all('a', class_='btn-primary'):
-            href = link.get('href')
-            if href and 'ocorrencias-criminais' in href:
-                return href
-                
-        print("⚠️ Link de download CSV não encontrado na página mais recente.")
-        return None
+        return recent_links
 
     except requests.exceptions.RequestException as e:
         print(f"❌ Erro ao acessar o portal mais recente: {e}")
-        return None
+        return []
 
 
 # =========================================================
@@ -74,13 +60,15 @@ def get_latest_link():
 
 # 1. Coleta Histórica
 csv_links = get_historic_links()
-print(f"✅ {len(csv_links)} arquivos CSV encontrados na fonte histórica.")
+print(f"✅ {len(csv_links)} arquivos CSV encontrados na fonte histórica (2016-2023).")
 
 # 2. Coleta Recente
-latest_link = get_latest_link()
-if latest_link and latest_link not in csv_links:
-    csv_links.append(latest_link)
-    print("✅ Link mais recente adicionado para processamento.")
+recent_links = get_latest_links_from_table()
+for link in recent_links:
+    if link not in csv_links:
+        csv_links.append(link)
+
+print(f"✅ {len(recent_links)} arquivos CSV encontrados na fonte recente (2024/2025).")
 
 if not csv_links:
     print("⚠️ NENHUM link CSV válido encontrado em nenhuma fonte.")
@@ -92,64 +80,38 @@ print(f"\n✅ Total de {len(csv_links)} arquivos únicos a serem processados.")
 
 
 # =========================================================
-# ETAPA 2: BAIXAR, TRATAR E SALVAR INCREMENTALMENTE
+# ETAPA 2: BAIXAR E SALVAR ARQUIVOS INDIVIDUAIS EM data/raw/
 # =========================================================
-print("\n🔽 Iniciando processamento incremental...")
-total_linhas = 0
+print("\n🔽 Iniciando download incremental...")
 
 for download_url in csv_links:
-    # A URL mais recente pode ser longa, pegamos o último segmento para nome de exibição
+    # Cria um nome de arquivo seguro a partir da URL
     filename = download_url.split('/')[-1].split('?')[0] 
     raw_path = os.path.join(RAW_DIR, filename)
     
-    print(f"   -> Processando: {filename}")
+    # Se o arquivo já existe, pulamos o download
+    if os.path.exists(raw_path):
+        print(f"   -> Pulando: {filename} (já existe)")
+        continue
+        
+    print(f"   -> Baixando: {filename}")
 
     try:
-        # 1. Download e Leitura
+        # 1. Download
         response = requests.get(download_url, stream=True)
         response.raise_for_status()
+        
+        # 2. Salvar o arquivo bruto
         with open(raw_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         
-        # Leitura: Usando encoding="latin-1" para evitar erro de codificação
-        df = pd.read_csv(raw_path, sep=";", encoding="latin-1", low_memory=False)
-        
-        # 2. Tratamento e Renomeação (Aplicado a cada DF individual)
-        COLUNAS_PARA_RENOMEAR = {
-            'OCORRENCIA_ANO': 'ano',                     
-            'NATUREZA1_DESCRICAO': 'tipo_crime',       
-            'ATENDIMENTO_BAIRRO_NOME': 'bairro',        
-            'OCORRENCIA_DATA': 'data_completa'          
-        }
-        df.rename(columns=COLUNAS_PARA_RENOMEAR, inplace=True)
-
-        if 'data_completa' in df.columns:
-            # OTIMIZAÇÃO: Define o formato exato para acelerar a conversão
-            df["data"] = pd.to_datetime(df["data_completa"], errors="coerce", format='%d/%m/%Y %H:%M:%S')
-            df["mes"] = df["data"].dt.month
-
-        # 3. Escrita Incremental no Arquivo Final (Otimização de Memória)
-        header_flag = primeiro_arquivo # Não precisa de 'global' aqui
-        mode_flag = 'w' if primeiro_arquivo else 'a'
-        
-        df.to_csv(
-            FINAL_CSV_PATH, 
-            mode=mode_flag, 
-            header=header_flag, 
-            index=False, 
-            encoding="utf-8"
-        )
-        
-        total_linhas += len(df)
-        print(f"      ✅ Adicionado ({len(df)} linhas). Total acumulado: {total_linhas} linhas.")
-        
-        primeiro_arquivo = False
+        print(f"      ✅ Salvo em {raw_path}")
 
     except requests.exceptions.HTTPError as e:
         print(f"      ❌ Erro HTTP ao processar {filename}: {e}")
     except Exception as e:
         print(f"      ❌ Erro inesperado ao processar {filename}: {e}")
 
-# --- FIM DA COLETA E PROCESSAMENTO ---
-print(f"\n✅ Pipeline concluído. Total de dados coletados e salvos: {total_linhas} linhas.")
+# --- FIM DA COLETA ---
+print("\n✅ Pipeline de download concluído. Arquivos individuais prontos para análise no Notebook.")
