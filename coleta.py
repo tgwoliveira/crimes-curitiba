@@ -62,42 +62,113 @@ def get_old_csv_links(portal_url):
         print(f"❌ Erro ao acessar o portal {portal_url}: {e}")
         return []
 
-def placeholder_for_2025_links():
+
+# --- NOVA FUNÇÃO: Coleta de links CSV 2025 do novo portal ---
+def get_2025_csv_links():
     """
-    <<< ESPAÇO RESERVADO PARA FUTURA COLETA DE 2025 >>>
-    Por enquanto, retorna uma lista vazia.
+    Busca links dos arquivos CSV de 2025 no novo portal de dados abertos de Curitiba.
     """
-    print("\n⏳ Coleta de 2025: Lógica de contorno 403 ainda não implementada.")
-    return []
+    print("\n🌐 Buscando links de 2025 no novo portal...")
+    # URL da página de detalhe do conjunto de dados
+    page_url = "https://dadosabertos.curitiba.pr.gov.br/conjuntodado/detalhe?chave=b16ead9d-835e-41e8-a4d7-dcc4f2b4b627"
+    try:
+        response = requests.get(page_url, headers=HEADERS)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        links = []
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if href.endswith('.csv') and '2025' in href and 'Sigesguarda' in href:
+                # Corrige link relativo se necessário
+                if href.startswith('http'):
+                    links.append(href)
+                else:
+                    links.append(urljoin(page_url, href))
+        print(f"✅ Encontrados {len(links)} links de 2025.")
+        return links
+    except Exception as e:
+        print(f"❌ Erro ao coletar links de 2025: {e}")
+        return []
 
 def download_file(url, target_path):
     """Baixa um arquivo com tratamento de erro."""
-    file_name = os.path.basename(target_path)
-    if os.path.exists(target_path):
-        print(f"   -> Pulando: {file_name} (já existe)")
-        return True
-
-    print(f"   -> Baixando: {file_name}...")
-    try:
-        response = requests.get(url, stream=True, headers=HEADERS)
-        response.raise_for_status()
-        
-        total_size = int(response.headers.get('content-length', 0))
-
-        with open(target_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
-                if chunk:
-                    f.write(chunk)
-        
-        print(f"   -> Download concluído: {file_name} ({round(total_size / (1024*1024), 2)} MB)")
-        return True
-
-    except requests.exceptions.RequestException as e:
-        print(f"   ❌ Erro ao baixar {file_name}: {e}")
-        return False
+    print("Função de download desativada. Não salva arquivos em disco.")
+    return False
 
 # ---------------------------------------------------------------------
-# --- FUNÇÕES DE ETL RELACIONAL (Substitui merge_and_process_data) ---
+# --- FUNÇÃO PARA PROCESSAR CSVs DIRETO DA INTERNET ---
+
+def process_csv_url_to_db(csv_url, engine):
+    """
+    Baixa o CSV diretamente da internet, processa em memória e carrega no banco de dados.
+    """
+    print(f"\n🌐 Processando CSV direto da internet: {csv_url}")
+    try:
+        try:
+            df = pd.read_csv(csv_url, sep=";", encoding="utf-8", low_memory=False, usecols=lambda col: col in CSV_COLUMNS)
+        except UnicodeDecodeError:
+            df = pd.read_csv(csv_url, sep=";", encoding="latin1", low_memory=False, usecols=lambda col: col in CSV_COLUMNS)
+        except ValueError:
+            print("   ❌ Erro de Coluna: O CSV não tem as colunas esperadas. Pulando.")
+            return
+
+        # Limpeza e normalização de strings
+        df = df.apply(lambda x: x.astype(str).str.strip().str.upper().replace('NAN', None).replace('NONE', None).replace('', None) if x.dtype == 'object' else x)
+        df['OCORRENCIA_DATA'] = pd.to_datetime(df['OCORRENCIA_DATA'], format='%d/%m/%Y', errors='coerce').dt.strftime('%Y-%m-%d')
+
+        # Carregamento para o banco de dados
+        with engine.connect() as connection:
+            for index, row in df.iterrows():
+                # --- DIMENSÃO TEMPO (TEMPO) ---
+                if row['OCORRENCIA_DATA']:
+                    tempo_data = {
+                        'data_completa': row['OCORRENCIA_DATA'],
+                        'ocorrencia_ano': row['OCORRENCIA_ANO'],
+                        'ocorrencia_mes': row['OCORRENCIA_MES'],
+                        'ocorrencia_dia_semana': row['OCORRENCIA_DIA_SEMANA'],
+                        'ocorrencia_periodo': row['OCORRENCIA_PERIODO'],
+                    }
+                    tempo_id = get_or_create_dimension(connection, 'TEMPO', ['data_completa'], tempo_data)
+                else:
+                    continue
+
+                # --- DIMENSÃO NATUREZA (NATUREZA) ---
+                natureza_data = {
+                    'natureza1_descricao': row.get('NATUREZA1_DESCRICAO') or 'NAO INFORMADO',
+                    'natureza2_descricao': row.get('NATUREZA2_DESCRICAO'),
+                    'tipo_envolvimento': row.get('TIPO_ENVOLVIMENTO'),
+                }
+                natureza_id = get_or_create_dimension(connection, 'NATUREZA', ['natureza1_descricao', 'natureza2_descricao', 'tipo_envolvimento'], natureza_data)
+
+                # --- DIMENSÃO LOCAL (LOCAL) ---
+                local_data = {
+                    'bairro_nome': row.get('ATENDIMENTO_BAIRRO_NOME') or 'NAO INFORMADO',
+                    'regional_nome': row.get('ATENDIMENTO_REGIONAL_NOME'),
+                    'logradouro_nome': row.get('ATENDIMENTO_LOGRADOURO_NOME'),
+                    'classificacao_bairro_regional': row.get('CLASSIFICACAO_BAIRRO_REGIONAL'),
+                }
+                local_id = get_or_create_dimension(connection, 'LOCAL', ['bairro_nome', 'regional_nome', 'logradouro_nome'], local_data)
+
+                # --- TABELA FATO (OCORRENCIA) ---
+                fato_sql = text("""
+                    INSERT INTO public.OCORRENCIA (tempo_id, natureza_id, local_id, ocorrencia_hora)
+                    VALUES (:tempo_id, :natureza_id, :local_id, :ocorrencia_hora)
+                """)
+                connection.execute(fato_sql, {
+                    'tempo_id': tempo_id,
+                    'natureza_id': natureza_id,
+                    'local_id': local_id,
+                    'ocorrencia_hora': row['OCORRENCIA_HORA']
+                })
+            connection.commit()
+            print(f"   -> Carregado {len(df)} linhas na tabela 'OCORRENCIA'.")
+    except Exception as e:
+        print(f"   ❌ Erro fatal ao processar {csv_url}. Rollback da transação: {e}")
+        try:
+            connection.rollback()
+        except:
+            pass
+        return
 # ---------------------------------------------------------------------
 
 def get_or_create_dimension(connection, table_name, lookup_cols, data):
@@ -142,110 +213,22 @@ def load_csv_to_relational_db(raw_dir, engine):
     """
     Carrega os dados dos CSVs para o modelo relacional (TEMPO, NATUREZA, LOCAL, OCORRENCIA).
     """
-    print("\n📦 Iniciando carregamento ETL para o Banco de Dados Relacional...")
-    all_files = [os.path.join(raw_dir, f) for f in os.listdir(raw_dir) if f.endswith('.csv')]
-    
-    if not all_files:
-        print("⚠️ Nenhuma base de dados CSV encontrada na pasta 'data/raw'. Abortando ETL.")
-        return
-        
-    for filename in all_files:
-        file_name_only = os.path.basename(filename)
-        print(f"   -> Processando ETL: {file_name_only}")
-        
-        try:
-            # 1. EXTRAÇÃO (Extract) e TRATAMENTO BÁSICO
-            try:
-                df = pd.read_csv(filename, sep=";", encoding="utf-8", low_memory=False, usecols=lambda col: col in CSV_COLUMNS)
-            except UnicodeDecodeError:
-                df = pd.read_csv(filename, sep=";", encoding="latin1", low_memory=False, usecols=lambda col: col in CSV_COLUMNS)
-            except ValueError:
-                 print("   ❌ Erro de Coluna: O CSV não tem as colunas esperadas. Pulando.")
-                 continue
-
-            # 2. TRANSFORMAÇÃO (Transform) - Limpeza e normalização de strings
-            df = df.apply(lambda x: x.astype(str).str.strip().str.upper().replace('NAN', None).replace('NONE', None).replace('', None) if x.dtype == 'object' else x)
-            df['OCORRENCIA_DATA'] = pd.to_datetime(df['OCORRENCIA_DATA'], format='%d/%m/%Y', errors='coerce').dt.strftime('%Y-%m-%d')
-            
-            # 3. CARREGAMENTO (Load) - Usando a conexão do Banco de Dados
-            with engine.connect() as connection:
-                for index, row in df.iterrows():
-                    
-                    # --- DIMENSÃO TEMPO (TEMPO) ---
-                    if row['OCORRENCIA_DATA']:
-                        tempo_data = {
-                            'data_completa': row['OCORRENCIA_DATA'],
-                            'ocorrencia_ano': row['OCORRENCIA_ANO'],
-                            'ocorrencia_mes': row['OCORRENCIA_MES'],
-                            'ocorrencia_dia_semana': row['OCORRENCIA_DIA_SEMANA'],
-                            'ocorrencia_periodo': row['OCORRENCIA_PERIODO'],
-                        }
-                        # Colunas usadas para o lookup (Chave única da dimensão)
-                        tempo_id = get_or_create_dimension(connection, 'TEMPO', ['data_completa'], tempo_data)
-                    else:
-                         continue # Pula registro sem data válida
-                        
-                    # --- DIMENSÃO NATUREZA (NATUREZA) ---
-                    natureza_data = {
-                        'natureza1_descricao': row.get('NATUREZA1_DESCRICAO') or 'NAO INFORMADO',
-                        'natureza2_descricao': row.get('NATUREZA2_DESCRICAO'),
-                        'tipo_envolvimento': row.get('TIPO_ENVOLVIMENTO'),
-                    }
-                    natureza_id = get_or_create_dimension(connection, 'NATUREZA', ['natureza1_descricao', 'natureza2_descricao', 'tipo_envolvimento'], natureza_data)
-
-                    # --- DIMENSÃO LOCAL (LOCAL) ---
-                    local_data = {
-                        'bairro_nome': row.get('ATENDIMENTO_BAIRRO_NOME') or 'NAO INFORMADO',
-                        'regional_nome': row.get('ATENDIMENTO_REGIONAL_NOME'),
-                        'logradouro_nome': row.get('ATENDIMENTO_LOGRADOURO_NOME'),
-                        'classificacao_bairro_regional': row.get('CLASSIFICACAO_BAIRRO_REGIONAL'),
-                    }
-                    local_id = get_or_create_dimension(connection, 'LOCAL', ['bairro_nome', 'regional_nome', 'logradouro_nome'], local_data)
-
-                    # --- TABELA FATO (OCORRENCIA) ---
-                    # Insere o fato usando as chaves estrangeiras
-                    fato_sql = text("""
-                        INSERT INTO public.OCORRENCIA (tempo_id, natureza_id, local_id, ocorrencia_hora)
-                        VALUES (:tempo_id, :natureza_id, :local_id, :ocorrencia_hora)
-                    """)
-                    
-                    connection.execute(fato_sql, {
-                        'tempo_id': tempo_id,
-                        'natureza_id': natureza_id,
-                        'local_id': local_id,
-                        'ocorrencia_hora': row['OCORRENCIA_HORA']
-                    })
-                
-                connection.commit()
-                print(f"   -> Carregado {len(df)} linhas na tabela 'OCORRENCIA'.")
-
-        except Exception as e:
-            print(f"   ❌ Erro fatal ao processar {file_name_only}. Rollback da transação: {e}")
-            connection.rollback() 
-            continue
-
-    print("\n✅ Carregamento de todos os arquivos para o Banco de Dados Relacional concluído!")
+    print("Função de ETL antiga desativada. Novo fluxo será em memória.")
+    return
 
 
 # --- FUNÇÃO PRINCIPAL ---
 
 def main():
-    # 1. Configurar pastas
-    RAW_DIR = "data/raw"
-    os.makedirs(RAW_DIR, exist_ok=True)
 
-    # -------------------------------------------------------------
-    # 2. CONEXÃO COM O BANCO DE DADOS (CRÍTICO)
-    # -------------------------------------------------------------
+    # 1. Conexão com o banco de dados
     DB_URL = os.environ.get("DATABASE_URL")
-    
     if DB_URL is None:
         print("="*60)
         print("ERRO: A variável de ambiente 'DATABASE_URL' não foi definida.")
         print("Por favor, defina a URL de conexão do seu Supabase (PostgreSQL) nos Secrets.")
         print("="*60)
         sys.exit(1)
-        
     try:
         engine = create_engine(DB_URL)
         with engine.connect() as connection:
@@ -258,26 +241,22 @@ def main():
         print(f"❌ ERRO INESPERADO: {e}")
         sys.exit(1)
 
-
-    # 3. Obter links antigos (2016-2024)
-    all_links = get_old_csv_links(URL_PORTAL)
-    
-    # 4. DOWNLOAD DE ARQUIVOS
+    # 2. Obter links antigos (2016-2024)
+    old_links = get_old_csv_links(URL_PORTAL)
+    # 3. Obter links de 2025
+    links_2025 = get_2025_csv_links()
+    # 4. Unir todos os links
+    all_links = old_links + links_2025
     if not all_links:
-        print("\n⚠️ Nenhuma URL de download encontrada. Pulará a etapa de download.")
-    else:
-        print("\n🔽 Iniciando pipeline de download dos arquivos antigos...")
-        for url in all_links:
-            file_name = url.split('/')[-1]
-            target_path = os.path.join(RAW_DIR, file_name)
-            download_file(url, target_path)
-            time.sleep(0.5) 
+        print("\n⚠️ Nenhuma URL de download encontrada. Nada será processado.")
+        return
 
-        print("\n✅ Pipeline de download concluído.")
-
-    # 5. CARREGAMENTO ETL PARA O BANCO DE DADOS
-    # O processamento ocorrerá para todos os CSVs em data/raw (baixados ou manuais)
-    load_csv_to_relational_db(RAW_DIR, engine)
+    # 5. Processar cada CSV diretamente da internet
+    print("\n🔽 Iniciando pipeline de ingestão direta dos arquivos antigos e 2025...")
+    for url in all_links:
+        process_csv_url_to_db(url, engine)
+        time.sleep(0.5)
+    print("\n✅ Pipeline de ingestão concluído.")
 
 
 if __name__ == "__main__":
