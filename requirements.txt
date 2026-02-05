@@ -1,5 +1,28 @@
-pandas
-requests
-beautifulsoup4
-sqlalchemy
-psycopg2-binary
+# ============================================================
+# Requirements - Análise de Crimes Curitiba
+# ============================================================
+
+# Manipulação de Dados
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Coleta de Dados (Web Scraping)
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Banco de Dados
+sqlalchemy>=2.0.0
+pymysql>=1.1.0
+
+# Análise e Visualização
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Jupyter Notebook (opcional, para análise)
+jupyter>=1.0.0
+ipykernel>=6.25.0
+
+# Utilitários
+python-dotenv>=1.0.0  # Para gerenciar variáveis de ambiente
+tqdm>=4.66.0          # Barra de progresso (opcional)

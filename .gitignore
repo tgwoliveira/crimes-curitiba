@@ -1,2 +1,133 @@
-# data/processed/ocorrencias_tratadas.csv é um arquivo de saída gerado
-data/processed/ocorrencias_tratadas.csv
+# ============================================================
+# .gitignore - Projeto Análise Crimes Curitiba
+# ============================================================
+
+# -----------------------------------------
+# DADOS (NÃO VERSIONAR - ARQUIVOS GRANDES)
+# -----------------------------------------
+data/raw/*.csv
+data/processed/*.csv
+data/processed/*.parquet
+*.csv
+*.parquet
+
+# -----------------------------------------
+# BANCO DE DADOS LOCAL
+# -----------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.sql.backup
+
+# Arquivos de dump do MySQL
+*.sql.gz
+*.dump
+backup/
+
+# -----------------------------------------
+# CONFIGURAÇÕES SENSÍVEIS
+# -----------------------------------------
+.env
+.env.local
+config.ini
+secrets.json
+db_config.py
+
+# Credenciais MySQL
+mysql_credentials.txt
+
+# -----------------------------------------
+# PYTHON
+# -----------------------------------------
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# -----------------------------------------
+# POWER BI
+# -----------------------------------------
+*.pbix.backup
+*.pbit.backup
+
+# Arquivos temporários do Power BI
+*.tmp
+
+# -----------------------------------------
+# SISTEMA OPERACIONAL
+# -----------------------------------------
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# -----------------------------------------
+# IDEs
+# -----------------------------------------
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# -----------------------------------------
+# LOGS E TEMPORÁRIOS
+# -----------------------------------------
+*.log
+logs/
+*.tmp
+temp/
+
+# -----------------------------------------
+# OUTROS
+# -----------------------------------------
+# Arquivos de cache
+.cache/
+*.cache
+
+# Arquivos de teste
+test_output/
+scratch/
