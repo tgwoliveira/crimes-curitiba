@@ -1,244 +1,122 @@
 #######################################################################
-
-# Script de Coleta e Carga de Dados - Crimes Curitiba
-
+# SISTEMA DE COLETA E CARGA - CRIMES CURITIBA
 #######################################################################
 
-
-
 # Versão: Local MySQL
-
 # Autor: Thiago Oliveira
-
 # Data: 2024-06-20
 
-
-
 # Este script:
-
 # 1. Busca os links dos CSVs de ocorrências criminais (2016-2025)
-
 # 2. Baixa e processa os dados diretamente da internet
-
 # 3. Carrega no banco MySQL local seguindo modelo dimensional
-
-
-
 #######################################################################
 
 from datetime import datetime
-
 import pandas as pd
-
 import requests
-
 from bs4 import BeautifulSoup
-
 from urllib.parse import urljoin
-
 import sys
 
-
-
 # Bibliotecas para o ETL Relacional
-
 from sqlalchemy import create_engine, text
-
 from sqlalchemy.exc import IntegrityError
 
-
-
-# ============================================================
-
+############3################################################
 # CONFIGURAÇÕES GLOBAIS
-
-# ============================================================
-
-
+#############################################################
 
 # URLs dos portais de dados
-
 URL_PORTAL_ANTIGO = "https://dadosabertos.c3sl.ufpr.br/curitiba/Sigesguarda/"
-
 URL_PORTAL_NOVO = "https://dadosabertos.curitiba.pr.gov.br/conjuntodado/detalhe?chave=b16ead9d-835e-41e8-a4d7-dcc4f2b4b627"
 
-
-
 # Cabeçalhos HTTP
-
 HEADERS = {
-
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-
 }
-
-
 
 # Colunas esperadas nos CSVs
-
 CSV_COLUMNS = [
-
     'OCORRENCIA_DATA', 'OCORRENCIA_ANO', 'OCORRENCIA_MES', 'OCORRENCIA_HORA',
-
     'OCORRENCIA_DIA_SEMANA', 'OCORRENCIA_PERIODO', 'ATENDIMENTO_BAIRRO_NOME',
-
     'ATENDIMENTO_REGIONAL_NOME', 'ATENDIMENTO_LOGRADOURO_NOME',
-
     'CLASSIFICACAO_BAIRRO_REGIONAL', 'NATUREZA1_CODIGO', 'NATUREZA1_DESCRICAO',
-
     'NATUREZA2_DESCRICAO', 'TIPO_ENVOLVIMENTO', 'ATENDIMENTO_NUMERO'
-
 ]
 
-
-
 # Configuração do banco MySQL LOCAL
-
 DB_CONFIG = {
-
     'host': '127.0.0.1',
-
     'port': 3306,
-
     'user': 'root',  # ALTERE conforme seu usuário MySQL
-
     'password': 'thiagohc',  # ALTERE para sua senha MySQL
-
     'database': 'crimes_curitiba'
-
 }
 
-
-
-# ============================================================
-
+###########################################################
 # FUNÇÕES DE COLETA (Web Scraping)
-
-# ============================================================
-
-
-
+###########################################################
 # BUSCA LINKS DOS CSVs ANTIGOS (2016-2024)
-
 def get_csv_links_antigos():
 
     # Fazemos um set chamado links e adicionamos os links encontrados
-
     links = set()
-
-   
-
     try:
-
         response = requests.get(URL_PORTAL_ANTIGO, headers=HEADERS)
-
         response.raise_for_status()
-
         soup = BeautifulSoup(response.text, 'html.parser')
-
        
-
         # percorremos todas as tags <a> que possuem o atributo href
-
         for link in soup.find_all('a', href=True):
-
             # Pegamos o valor do atributo href
-
             href = link.get('href')
-
             # Se o primeiro caractere for um dígito e o nome do arquivo conter '_sigesguarda_-_base_de_dados.csv', consideramos como link válido
-
             if href[0].isdigit() and '_sigesguarda_-_base_de_dados.csv' in href.lower():
-
                 # Construímos a URL completa usando urljoin para garantir que seja um link absoluto
-
                 full_url = urljoin(URL_PORTAL_ANTIGO, href)
-
                 # Adicionamos a URL completa ao set de links
-
                 links.add(full_url)
-
        
-
         # Ordenamos os links para garantir que sejam processados do mais antigo para o mais recente
-
         old_links = sorted(links)
-
         return old_links
 
-
-
     except requests.exceptions.RequestException as e:
-
-        print(f"❌ Erro ao acessar o portal {URL_PORTAL_ANTIGO}: {e}")
-
+        print(f"Erro ao acessar o portal {URL_PORTAL_ANTIGO}: {e}")
         return []
-
-
 
 # a prefeitura mudou o portal e não foi encontrado os dados de 2025 até o dia de hoje (2024-06-20)
-
 # teremos que fazer um scraping desses dados uma outra hora
-
 # BUSCA LINKS DOS CSVs DE 2025
-
+'''
 def get_csv_links_2025():
-
     links = []
-
-   
-
     try:
-
         response = requests.get(URL_PORTAL_NOVO, headers=HEADERS, timeout=30)
-
         response.raise_for_status()
-
         soup = BeautifulSoup(response.text, 'html.parser')
-
        
-
         for a in soup.find_all('a', href=True):
-
             href = a['href']
-
             if href.endswith('.csv') and '2025' in href and 'Sigesguarda' in href:
-
                 if href.startswith('http'):
-
                     links.append(href)
-
                 else:
-
                     links.append(urljoin(URL_PORTAL_NOVO, href))
-
-       
-
+     
         print(f"   ✅ Encontrados {len(links)} CSVs de 2025")
-
         return links
-
        
-
     except Exception as e:
-
         print(f"   ❌ Erro ao buscar CSVs de 2025: {e}")
-
         return []
-
-
-
-
+'''
 
 # ============================================================
-
 # FUNÇÕES AUXILIARES PARA DIMENSÕES
-
 # ============================================================
-
-
 
 def classificar_periodo_dia(hora_str):
 
@@ -267,9 +145,6 @@ def classificar_periodo_dia(hora_str):
     except:
 
         return 'NÃO INFORMADO'
-
-
-
 
 
 def extrair_categoria_crime(descricao):
@@ -323,9 +198,6 @@ def extrair_categoria_crime(descricao):
         return 'OUTROS'
 
 
-
-
-
 def get_nome_mes(mes_num):
 
     """Retorna nome do mês"""
@@ -343,16 +215,9 @@ def get_nome_mes(mes_num):
         return 'NÃO INFORMADO'
 
 
-
-
-
 # ============================================================
-
 # FUNÇÕES DE INSERÇÃO NO BANCO
-
 # ============================================================
-
-
 
 def get_or_create_tempo(connection, data_completa, ano, mes, dia_semana, periodo):
 
@@ -445,9 +310,6 @@ def get_or_create_tempo(connection, data_completa, ano, mes, dia_semana, periodo
         result = connection.execute(sql_select, {'data_completa': data_completa}).fetchone()
 
         return result[0] if result else None
-
-
-
 
 
 def get_or_create_natureza(connection, nat1_codigo, nat1_desc, nat2_desc, tipo_envolvimento):
@@ -549,9 +411,6 @@ def get_or_create_natureza(connection, nat1_codigo, nat1_desc, nat2_desc, tipo_e
         return None
 
 
-
-
-
 def get_or_create_local(connection, bairro, regional, logradouro, classificacao):
 
     """Busca ou cria registro na DIM_LOCAL"""
@@ -641,9 +500,6 @@ def get_or_create_local(connection, bairro, regional, logradouro, classificacao)
         print(f"   DEBUG get_or_create_local: {e}")
 
         return None
-
-
-
 
 
 def get_or_create_hora(connection, hora_str):
@@ -743,16 +599,9 @@ def get_or_create_hora(connection, hora_str):
         return None
 
 
-
-
-
 # ============================================================
-
 # FUNÇÃO PRINCIPAL DE PROCESSAMENTO
-
 # ============================================================
-
-
 
 def processar_csv_para_mysql(csv_url, engine):
 
@@ -1024,194 +873,91 @@ def processar_csv_para_mysql(csv_url, engine):
 
         print(f"   ❌ Erro ao processar CSV: {e}")
 
-
-
-# ============================================================
-
+###########################################################################
 # FUNÇÃO PRINCIPAL
-
-# ============================================================
-
-
-
+###########################################################################
 def main():
-
     print("# SISTEMA DE COLETA E CARGA - CRIMES CURITIBA")
-
-
-
     ###############################################################
-
-    # 1. Criar engine de conexão MySQL
-
+    # 1. CRIAR CONEXÃO COM MYSQL
+    ##############################################################
     try:
-
         connection_string = (
-
             f"mysql+pymysql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
-
             f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
-
             f"?charset=utf8mb4"
+        )     
 
-        )
-
-       
-
-        engine = create_engine(connection_string, pool_pre_ping=True)
-
-       
-
+        engine = create_engine(connection_string, pool_pre_ping=True)      
         # Testar conexão
-
         with engine.connect() as conn:
-
             conn.execute(text("SELECT 1"))
-
-       
 
         print("Conexão com o Banco de Dados MySQL estabelecida!")
 
-       
-
     except Exception as e:
-
         print(f"\nERRO DE CONEXÃO COM MYSQL:")
-
         print(f"   {e}\n")
-
         print("\nVerifique:")
-
         print("   1. MySQL está rodando?")
-
         print("   2. Usuário e senha estão corretos?")
-
         print("   3. Banco 'crimes_curitiba' foi criado? (Execute setup_database.sql)")
-
         sys.exit(1)
 
-   
-
     ##############################################################
-
-    # 2. Buscar links dos CSVs
-
+    # 2. BUSCAR LINKS DOS CSVS
+    ##############################################################
+    print("\nBuscando links dos arquivos CSV...")
     # pegamos os links dos CSVs antigos (2016-2024)
-
     links_antigos = get_csv_links_antigos()
-
     # os dados de 2025 até o momento não foram encontrados = modificar esta função uma outra hora
-
     #links_2025 = get_csv_links_2025()
-
     links_2025 = []
 
-
-
     # Combine todos os links em uma única lista
-
     todos_links = links_antigos + links_2025
-
    
-
     # Se nenhum link encontrado, encerrar
-
     if not todos_links:
-
         print("\n  Nenhum CSV encontrado. Verifique sua conexão com a internet.")
-
         return
 
-   
-
     # Todos os links encontrados
-
     for i in todos_links:
-
         print(i)
 
-
-
     ##############################################################
-
-    # 3. Processar cada CSV
-
+    # 3. PROCESSAR CADA CSV E CARREGAR NO MYSQL
+    ##############################################################
+    print("\nIniciando processamento dos arquivos CSV...")
     # Percorremos cada link e processamos
-
     for i, url in enumerate(todos_links, 1):
-
         print(f"\n[{i}/{len(todos_links)}]", end=" ")
-
         processar_csv_para_mysql(url, engine)
 
-   
-
     '''
-
-    # 4. Estatísticas finais
-
-    print("\n" + "=" * 70)
-
-    print("📊 ESTATÍSTICAS FINAIS")
-
-    print("=" * 70)
-
-   
-
+    ##############################################################
+    # 4. ESTATÍSTICAS FINAIS
+    ##############################################################
+    print("\nCalculando estatísticas finais...")
+    
     with engine.connect() as conn:
-
         stats = conn.execute(text("""
-
             SELECT
-
                 (SELECT COUNT(*) FROM FATO_OCORRENCIA) AS total_ocorrencias,
-
                 (SELECT COUNT(DISTINCT tempo_id) FROM FATO_OCORRENCIA) AS datas_distintas,
-
                 (SELECT COUNT(*) FROM DIM_NATUREZA) AS tipos_crime,
-
                 (SELECT COUNT(*) FROM DIM_LOCAL) AS locais,
-
                 (SELECT MIN(data_completa) FROM DIM_TEMPO) AS data_inicial,
-
                 (SELECT MAX(data_completa) FROM DIM_TEMPO) AS data_final
-
         """)).fetchone()
 
-       
-
         print(f"\n✅ Total de Ocorrências: {stats[0]:,}")
-
         print(f"📅 Período: {stats[4]} a {stats[5]}")
-
         print(f"📍 Locais cadastrados: {stats[3]}")
-
         print(f"🔍 Tipos de crime: {stats[2]}")
-
         print(f"⏱️  Tempo total: {tempo_total:.2f} minutos")
-
-       
-
-    print("\n" + "=" * 70)
-
-    print("✅ PROCESSO CONCLUÍDO COM SUCESSO!")
-
-    print("=" * 70)
-
-    print("\n💡 Próximos passos:")
-
-    print("   1. Abra o Jupyter Notebook: notebooks/analise_dados.ipynb")
-
-    print("   2. Ou conecte o Power BI ao banco MySQL local")
-
-    print("   3. Ou execute consultas SQL diretamente no MySQL Workbench")
-
-    print("\n")
-
     '''
 
-
-
 if __name__ == "__main__":
-
     main()
